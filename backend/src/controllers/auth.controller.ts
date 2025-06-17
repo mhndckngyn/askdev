@@ -43,6 +43,7 @@ const AuthController = {
         httpOnly: true,
         maxAge: constants.cookie.maxAge,
         sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
       });
 
       res.redirect('http://localhost:5173');
