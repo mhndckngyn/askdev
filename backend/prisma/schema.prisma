@@ -1,0 +1,325 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum AuthProvider {
+  EMAIL
+  GOOGLE
+  GITHUB
+}
+
+enum ContentType {
+  QUESTION
+  ANSWER
+  COMMENT
+}
+
+enum ReportStatus {
+  PENDING
+  REVIEWED
+  REJECTED
+}
+
+enum  NotificationType{
+  QUESTION_VOTE
+  ANSWER_VOTE
+  COMMENT_VOTE
+  COMMENT
+  ANSWER
+  ANSWER_CHOSEN
+}
+
+enum BanAction {
+  BAN
+  UNBAN
+}
+
+
+enum HistoryType {
+  QUESTION_CREATE
+  ANSWER_CREATE
+  COMMENT_CREATE
+  QUESTION_EDIT
+  ANSWER_EDIT
+  COMMENT_EDIT
+  QUESTION_VOTE
+  ANSWER_VOTE
+  COMMENT_VOTE
+  QUESTION_DOWNVOTE
+  ANSWER_DOWNVOTE
+  COMMENT_DOWNVOTE
+  ANSWER_CHOSEN
+  REPORT_CREATE
+  QUESTION_DELETE
+  ANSWER_DELETE
+  COMMENT_DELETE
+}
+
+
+model User {
+  id             String   @id @default(uuid())
+  role           Role     @default(MEMBER)
+  username       String   @unique
+  profilePicture String
+  bio            String?
+  github         String?
+  showGithub     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  isBanned       Boolean  @default(false)
+
+  account Account? @relation()
+
+  questions Question[]
+
+  answers       Answer[]
+  answerVotes   AnswerVote[]
+  comments      Comment[]
+  questionVotes QuestionVote[]
+  commentVotes  CommentVote[]
+  reports       Report[]
+  history       History[]
+
+  notifications          Notification[]  @relation("UserNotifications")
+  actedNotifications     Notification[]  @relation("NotificationActor")
+
+  banLogs        BanLog[] @relation("BannedUser")
+  bansIssued     BanLog[] @relation("BanActor")
+}
+
+model Account {
+  id       String       @id @default(uuid())
+  userId   String       @unique
+  provider AuthProvider
+  email    String?      @unique
+
+  // cho GOOGLE/GITHUB auth
+  providerUserId String?
+
+  // cho EMAIL auth
+  password          String?
+  isVerified        Boolean
+  verificationToken String?
+  tokenExpiry       DateTime?
+
+  user               User                @relation(fields: [userId], references: [id])
+  passwordResetToken PasswordResetToken? @relation()
+
+  @@unique([provider, providerUserId])
+}
+
+model Question {
+  id        String    @id @default(uuid())
+  userId    String
+  title     String
+  content   Json
+  images    String[]
+  views     Int       @default(0)
+  upvotes   Int       @default(0)
+  downvotes Int       @default(0)
+  isSolved  Boolean   @default(false)
+  isHidden  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime?
+
+  user  User?          @relation(fields: [userId], references: [id])
+  edits QuestionEdit[]
+  tags  Tag[]          @relation("QuestionTags")
+
+  answers Answer[]
+  votes   QuestionVote[]
+}
+
+model QuestionEdit {
+  questionId      String
+  createdAt       DateTime @default(now())
+  previousContent Json?
+  previousTitle   String?
+  previousImages  String[]
+  question        Question @relation(fields: [questionId], references: [id])
+
+  @@id([questionId, createdAt])
+}
+
+model QuestionVote {
+  userId     String
+  questionId String
+  type       Int
+  user       User     @relation(fields: [userId], references: [id])
+  question   Question @relation(fields: [questionId], references: [id])
+
+  @@id([userId, questionId])
+}
+
+model Tag {
+  id            String   @id @default(uuid())
+  name          String   @unique
+  descriptionVi String?
+  descriptionEn String?
+  createdAt     DateTime @default(now())
+
+  questions Question[] @relation("QuestionTags")
+}
+
+model Answer {
+  id         String   @id @default(uuid())
+  userId     String
+  questionId String
+  content    String
+  upvotes    Int      @default(0)
+  downvotes  Int      @default(0)
+  isChosen   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime?
+  images     String[] @default([])
+  isHidden   Boolean  @default(false)
+
+  user     User         @relation(fields: [userId], references: [id])
+  question Question     @relation(fields: [questionId], references: [id])
+  edits    AnswerEdit[]
+  votes    AnswerVote[]
+  comments Comment[]
+}
+
+model AnswerEdit {
+  answerId        String
+  createdAt       DateTime @default(now())
+  previousImages  String[] @default([])
+  previousContent String
+
+  answer Answer @relation(fields: [answerId], references: [id])
+
+  @@id([answerId, createdAt])
+}
+
+model AnswerVote {
+  userId   String
+  answerId String
+  type     Int
+
+  user   User   @relation(fields: [userId], references: [id])
+  answer Answer @relation(fields: [answerId], references: [id])
+
+  @@id([userId, answerId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  userId    String
+  answerId  String
+  content   String
+  upvotes   Int      @default(0)
+  downvotes Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt  DateTime?
+  images     String[] @default([])
+  isHidden   Boolean  @default(false)
+
+  user   User          @relation(fields: [userId], references: [id])
+  answer Answer        @relation(fields: [answerId], references: [id])
+  edits  CommentEdit[]
+
+  commentVotes CommentVote[]
+
+  @@index([answerId])
+}
+
+model CommentEdit {
+  commentId       String
+  createdAt       DateTime @default(now())
+  previousImages  String[] @default([])
+  previousContent String
+
+  comment Comment @relation(fields: [commentId], references: [id])
+
+  @@id([commentId, createdAt])
+}
+
+model CommentVote {
+  userId    String
+  commentId String
+  type      Int
+
+  user    User    @relation(fields: [userId], references: [id])
+  comment Comment @relation(fields: [commentId], references: [id])
+
+  @@id([userId, commentId])
+}
+
+model Report {
+  id           String       @id @default(uuid())
+  reportedById String
+  contentType  ContentType
+  contentId    String
+  reason       String
+  status       ReportStatus @default(PENDING)
+  createdAt    DateTime     @default(now())
+  isHidden     Boolean      @default(false)
+
+  reportedBy User @relation(fields: [reportedById], references: [id])
+
+  @@index([contentId])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String
+  createdAt DateTime @default(now())
+  expiredAt DateTime
+
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String  @unique
+}
+
+
+model Notification {
+  id           String   @id @default(uuid())
+  type         NotificationType
+  userId       String
+  actorId      String  
+  contentTitle String
+  questionId   String?
+  createdAt    DateTime @default(now())
+  isRead       Boolean  @default(false)
+
+  user         User     @relation("UserNotifications", fields: [userId], references: [id])
+  actor        User     @relation("NotificationActor", fields: [actorId], references: [id])
+
+  @@index([userId])
+  @@index([actorId])
+}
+
+model BanLog {
+  id         String   @id @default(uuid())
+  userId     String
+  actorId    String   // người ban
+  action     BanAction
+  reason     String?
+  createdAt  DateTime @default(now())
+
+  user       User     @relation("BannedUser", fields: [userId], references: [id])
+  admin      User     @relation("BanActor", fields: [actorId], references: [id])
+}
+
+
+model History {
+  id           String   @id @default(uuid())
+  type         HistoryType
+  userId       String 
+  contentTitle String
+  questionId   String?
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id])
+}
+
